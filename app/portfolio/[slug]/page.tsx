@@ -1,12 +1,6 @@
-import PortfolioGrid from '@/components/PortfolioGrid';
-import type { Category } from '@/components/PortfolioGrid';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
-import ManifestoSection from '@/components/ManifestoSection';
-import MarqueeSection from '@/components/MarqueeSection';
-import ServicesSection from '@/components/ServicesSection';
-import CapabilitiesSection from '@/components/CapabilitiesSection';
+import { notFound } from 'next/navigation';
 import { Project } from '@/types';
+import ProjectDetailView from '@/components/ProjectDetailView';
 
 const dummyProjects: Project[] = [
   {
@@ -107,47 +101,23 @@ async function getProjects(): Promise<Project[]> {
   }
 }
 
-async function getCategories(): Promise<Category[]> {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-    const res = await fetch(`${baseUrl}/api/categories`, { cache: 'no-store' });
-    if (!res.ok) return [];
-    return await res.json();
-  } catch {
-    return [];
-  }
-}
+export default async function ProjectDetail({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const projects = await getProjects();
+  const project = projects.find((p) => p.slug === slug) || null;
 
-export default async function Home() {
-  const [projects, categories] = await Promise.all([getProjects(), getCategories()]);
+  if (!project) {
+    notFound();
+  }
+
+  // Calculate next project
+  const currentIndex = projects.findIndex((p) => p.slug === slug);
+  const nextProject = projects.length > 1
+    ? projects[(currentIndex + 1) % projects.length]
+    : null;
 
   return (
-    <div className="flex flex-col min-h-screen">
-      {/* ── Navigation ── */}
-      <Navbar />
-
-      <main className="flex-1">
-        {/* 1. Hero/Manifesto — oversized philosophy statement */}
-        <div className="pt-24">
-          <ManifestoSection />
-        </div>
-
-        {/* 2. Infinite running marquee */}
-        <MarqueeSection />
-
-        {/* 3. Core Services — hover image preview micro-interaction */}
-        <ServicesSection />
-
-        {/* 4. Capabilities — 3-step process grid */}
-        <CapabilitiesSection />
-
-        {/* 5. Portfolio Grid — Selected Works */}
-        <PortfolioGrid initialProjects={projects} initialCategories={categories} />
-      </main>
-
-      {/* 6. Footer — contact + newsletter + giant wordmark */}
-      <Footer />
-    </div>
+    <ProjectDetailView project={project} nextProject={nextProject} />
   );
 }
 
