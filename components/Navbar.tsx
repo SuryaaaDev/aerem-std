@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { Menu, X } from 'lucide-react';
 
 const NAV_LINKS = [
-  { label: 'Work', href: '/' },
-  { label: 'Studio', href: '#' },
-  { label: 'Contact', href: '#' },
+  { label: 'Work', href: 'work' },
+  { label: 'Services', href: 'services' },
+  { label: 'Process', href: 'process' },
+  { label: 'Contact', href: 'contact' },
 ];
 
 export default function Navbar() {
@@ -21,6 +22,14 @@ export default function Navbar() {
   }, [menuOpen]);
 
   const closeMenu = () => setMenuOpen(false);
+
+  const scrollTo = (id: string) => {
+    closeMenu();
+    const el = document.getElementById(id);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   return (
     <>
@@ -38,13 +47,14 @@ export default function Navbar() {
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-8">
           {NAV_LINKS.map((item) => (
-            <Link
+            <button
               key={item.label}
-              href={item.href}
-              className="text-[10px] font-semibold uppercase tracking-[0.2em] text-foreground/60 hover:text-foreground transition-colors duration-200"
+              type="button"
+              onClick={() => scrollTo(item.href)}
+              className="text-[10px] font-semibold uppercase tracking-[0.2em] text-foreground/60 hover:text-foreground transition-colors duration-200 cursor-pointer"
             >
               {item.label}
-            </Link>
+            </button>
           ))}
 
           <Link
@@ -88,17 +98,17 @@ export default function Navbar() {
         >
           <div className="px-4 sm:px-6 py-8 flex flex-col gap-1 min-h-full">
             {NAV_LINKS.map((item) => (
-              <Link
+              <button
                 key={item.label}
-                href={item.href}
-                onClick={closeMenu}
-                className="group flex items-center justify-between py-4 border-b border-border/10 text-sm font-bold uppercase tracking-[0.2em] text-foreground/70 hover:text-foreground transition-colors duration-200"
+                type="button"
+                onClick={() => scrollTo(item.href)}
+                className="group flex items-center justify-between py-4 border-b border-border/10 text-sm font-bold uppercase tracking-[0.2em] text-foreground/70 hover:text-foreground transition-colors duration-200 cursor-pointer text-left w-full"
               >
                 {item.label}
                 <span className="text-[9px] font-mono text-foreground/25 group-hover:text-accent transition-colors">
                   →
                 </span>
-              </Link>
+              </button>
             ))}
 
             <Link

@@ -7,9 +7,9 @@ const PRESETS: Record<
   { maxWidth: number; maxHeight: number; quality: number }
 > = {
   // Portfolio cards & cover — 4:5 ratio, displayed ~800px wide
-  thumbnail: { maxWidth: 900, maxHeight: 1125, quality: 78 },
+  thumbnail: { maxWidth: 900, maxHeight: 1125, quality: 82 },
   // Detail page mockups — max display ~1600px wide
-  mockup: { maxWidth: 1600, maxHeight: 1600, quality: 80 },
+  mockup: { maxWidth: 1600, maxHeight: 1600, quality: 82 },
 };
 
 const ALLOWED_MIME = new Set([
@@ -40,7 +40,7 @@ export async function optimizeImage(
       fit: 'inside',
       withoutEnlargement: true,
     })
-    .webp({ quality: preset.quality, effort: 4 })
+    .webp({ quality: preset.quality, effort: 6, smartSubsample: true })
     .toBuffer();
 
   return {

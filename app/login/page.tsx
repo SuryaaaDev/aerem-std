@@ -1,4 +1,5 @@
 import { login } from './actions'
+import Link from 'next/link'
 
 export default function LoginPage({
   searchParams,
@@ -75,6 +76,13 @@ export default function LoginPage({
           >
             Authenticate //
           </button>
+
+          <Link
+            href="/"
+            className="text-center text-[9px] font-mono uppercase tracking-[0.2em] text-foreground/30 hover:text-accent transition-colors duration-200 mt-1"
+          >
+            ← Back to Portfolio
+          </Link>
         </form>
       </div>
     </div>

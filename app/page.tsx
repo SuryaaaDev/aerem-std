@@ -7,112 +7,42 @@ import MarqueeSection from '@/components/MarqueeSection';
 import ServicesSection from '@/components/ServicesSection';
 import CapabilitiesSection from '@/components/CapabilitiesSection';
 import { Project } from '@/types';
-
-const dummyProjects: Project[] = [
-  {
-    id: '1',
-    title: 'NEUE FORM ARCHITECTS',
-    slug: 'neue-form-architects',
-    client: 'Neue Form',
-    year: 2024,
-    category: 'BRANDING',
-    description: 'Structural identity systems for a Berlin-based architectural firm.',
-    thumbnail: 'https://images.unsplash.com/photo-1600132806370-bf17e65e942f?q=80&w=800&auto=format&fit=crop',
-    mockups: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: '2',
-    title: 'CYBER COUTURE',
-    slug: 'cyber-couture',
-    client: 'Cyber Couture',
-    year: 2024,
-    category: 'DESAIN KAOS',
-    description: 'Immersive e-commerce experience for digital-first fashion label.',
-    thumbnail: 'https://images.unsplash.com/photo-1618331835717-801e976710b2?q=80&w=800&auto=format&fit=crop',
-    mockups: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: '3',
-    title: 'TYPO MONO VOL 4',
-    slug: 'typo-mono-vol-4',
-    client: 'Typo Mono',
-    year: 2024,
-    category: 'DESAIN LOGO',
-    description: 'Experimental type publication exploring monospaced aesthetics.',
-    thumbnail: 'https://images.unsplash.com/photo-1621844234502-3c8230557cc3?q=80&w=800&auto=format&fit=crop',
-    mockups: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: '4',
-    title: 'KINETIC FLUX',
-    slug: 'kinetic-flux',
-    client: 'Kinetic',
-    year: 2024,
-    category: 'LIVERY MOBIL',
-    description: 'Dynamic brand identity for a generative tech company.',
-    thumbnail: 'https://images.unsplash.com/photo-1550853024-fae8cd4be47f?q=80&w=800&auto=format&fit=crop',
-    mockups: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: '5',
-    title: 'STILL FOUNDRY',
-    slug: 'still-foundry',
-    client: 'Still Foundry',
-    year: 2023,
-    category: 'BRANDING',
-    description: 'Redefining visual heritage for a heritage industrial manufacturer.',
-    thumbnail: 'https://images.unsplash.com/photo-1634152962476-4b8a00e1915c?q=80&w=800&auto=format&fit=crop',
-    mockups: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  },
-  {
-    id: '6',
-    title: 'PORTAL OS',
-    slug: 'portal-os',
-    client: 'Portal',
-    year: 2024,
-    category: 'DESAIN LOGO',
-    description: 'A brutalist approach to modern documentation and UI design.',
-    thumbnail: 'https://images.unsplash.com/photo-1527685216219-c7104b281f62?q=80&w=800&auto=format&fit=crop',
-    mockups: [],
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }
-];
+import { createClient } from '@/lib/supabase/server';
 
 async function getProjects(): Promise<Project[]> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-    const res = await fetch(`${baseUrl}/api/projects`, { cache: 'no-store' });
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('projects')
+      .select('*')
+      .order('created_at', { ascending: false });
 
-    if (!res.ok) {
-      console.error('API responded with error, falling back to dummy data');
-      return dummyProjects;
+    if (error) {
+      console.error('Supabase error fetching projects:', error.message);
+      return [];
     }
 
-    const data = await res.json();
-    return data && data.length > 0 ? data : dummyProjects;
+    return data ?? [];
   } catch (error) {
-    console.error('Fetch failed, falling back to dummy data', error);
-    return dummyProjects;
+    console.error('Failed to fetch projects:', error);
+    return [];
   }
 }
 
 async function getCategories(): Promise<Category[]> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-    const res = await fetch(`${baseUrl}/api/categories`, { cache: 'no-store' });
-    if (!res.ok) return [];
-    return await res.json();
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('sort_order', { ascending: true });
+
+    if (error) {
+      console.error('Supabase error fetching categories:', error.message);
+      return [];
+    }
+
+    return data ?? [];
   } catch {
     return [];
   }
@@ -128,7 +58,7 @@ export default async function Home() {
 
       <main className="flex-1">
         {/* 1. Hero/Manifesto — oversized philosophy statement */}
-        <div className="pt-24">
+        <div id="manifesto" className="pt-24">
           <ManifestoSection />
         </div>
 
@@ -136,17 +66,25 @@ export default async function Home() {
         <MarqueeSection />
 
         {/* 3. Core Services — hover image preview micro-interaction */}
-        <ServicesSection />
+        <div id="services">
+          <ServicesSection />
+        </div>
 
         {/* 4. Capabilities — 3-step process grid */}
-        <CapabilitiesSection />
+        <div id="process">
+          <CapabilitiesSection />
+        </div>
 
         {/* 5. Portfolio Grid — Selected Works */}
-        <PortfolioGrid initialProjects={projects} initialCategories={categories} />
+        <div id="work">
+          <PortfolioGrid initialProjects={projects} initialCategories={categories} />
+        </div>
       </main>
 
       {/* 6. Footer — contact + newsletter + giant wordmark */}
-      <Footer />
+      <div id="contact">
+        <Footer />
+      </div>
     </div>
   );
 }

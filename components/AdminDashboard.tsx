@@ -40,6 +40,47 @@ export default function AdminDashboard({ initialProjects }: { initialProjects: P
 
   const [notifications, setNotifications] = useState<SnackbarNotification[]>([]);
 
+  // Storage usage state
+  const [storageInfo, setStorageInfo] = useState<{
+    usedMB: number;
+    limitMB: number;
+    usagePercent: number;
+    isNearLimit: boolean;
+    isAtLimit: boolean;
+  } | null>(null);
+
+  const fetchStorageUsage = async () => {
+    try {
+      const res = await fetch('/api/storage-usage');
+      if (!res.ok) return;
+      const data = await res.json();
+      setStorageInfo(data);
+      if (data.isAtLimit) {
+        showNotification('STORAGE PENUH — Hapus gambar sebelum upload baru.', 'error');
+      } else if (data.isNearLimit) {
+        showNotification(`STORAGE HAMPIR PENUH — ${data.usedMB}/${data.limitMB} MB digunakan.`, 'warning');
+      }
+    } catch {
+      // silently fail — non-critical
+    }
+  };
+
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void) => {
+    setConfirmModal({ open: true, title, message, onConfirm });
+  };
+
+  const closeConfirm = () => {
+    setConfirmModal((prev) => ({ ...prev, open: false }));
+  };
+
   const showNotification = (message: string, type: SnackbarNotification['type'] = 'info') => {
     const id = Date.now();
     setNotifications((prev) => [...prev, { id, message, type }]);
@@ -54,6 +95,7 @@ export default function AdminDashboard({ initialProjects }: { initialProjects: P
       .then((r) => r.json())
       .then((data) => Array.isArray(data) ? setCategories(data) : null)
       .catch(() => null);
+    fetchStorageUsage();
   }, []);
 
   // Category CRUD handlers
@@ -104,22 +146,27 @@ export default function AdminDashboard({ initialProjects }: { initialProjects: P
   };
 
   const handleDeleteCategory = async (id: string, name: string) => {
-    if (!confirm(`Hapus kategori '${name}'?`)) return;
-    setCatLoading(true);
-    try {
-      const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to delete category');
+    showConfirm(
+      'DELETE CATEGORY',
+      `Hapus kategori '${name}'? Aksi ini tidak bisa dibatalkan.`,
+      async () => {
+        setCatLoading(true);
+        try {
+          const res = await fetch(`/api/categories/${id}`, { method: 'DELETE' });
+          if (!res.ok) {
+            const data = await res.json();
+            throw new Error(data.error || 'Failed to delete category');
+          }
+          setCategories((prev) => prev.filter((c) => c.id !== id));
+          showNotification(`CATEGORY '${name}' DELETED`, 'success');
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          showNotification(`ERROR: ${msg.toUpperCase()}`, 'error');
+        } finally {
+          setCatLoading(false);
+        }
       }
-      setCategories((prev) => prev.filter((c) => c.id !== id));
-      showNotification(`CATEGORY '${name}' DELETED`, 'success');
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      showNotification(`ERROR: ${msg.toUpperCase()}`, 'error');
-    } finally {
-      setCatLoading(false);
-    }
+    );
   };
 
   const supabase = createClient();
@@ -371,22 +418,27 @@ export default function AdminDashboard({ initialProjects }: { initialProjects: P
 
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this project?')) {
-      try {
-        const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
-        if (!res.ok) throw new Error('Failed to delete project');
-        
-        setProjects(projects.filter((p) => p.id !== id));
-        if (formData.id === id) {
-          setIsEditing(false);
+    const project = projects.find((p) => p.id === id);
+    const name = project?.title ?? 'this project';
+    showConfirm(
+      'DELETE PROJECT',
+      `Hapus "${name}"? Semua gambar di storage akan ikut terhapus permanen.`,
+      async () => {
+        try {
+          const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+          if (!res.ok) throw new Error('Failed to delete project');
+          setProjects(projects.filter((p) => p.id !== id));
+          if (formData.id === id) {
+            setIsEditing(false);
+          }
+          showNotification('PROJECT DELETED SUCCESSFULLY', 'success');
+        } catch (error) {
+          console.error(error);
+          const msg = error instanceof Error ? error.message : String(error);
+          showNotification(`ERROR DELETING PROJECT: ${msg.toUpperCase()}`, 'error');
         }
-        showNotification('PROJECT DELETED SUCCESSFULLY', 'success');
-      } catch (error) {
-        console.error(error);
-        const msg = error instanceof Error ? error.message : String(error);
-        showNotification(`ERROR DELETING PROJECT: ${msg.toUpperCase()}`, 'error');
       }
-    }
+    );
   };
 
   // Filter projects by search and category in the sidebar
@@ -625,6 +677,42 @@ export default function AdminDashboard({ initialProjects }: { initialProjects: P
             </div>
           )}
         </div>
+
+        {/* ── STORAGE USAGE INDICATOR ── */}
+        {storageInfo && (
+          <div className="px-4 py-3 border-t border-border/10 shrink-0">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[8px] font-mono uppercase tracking-widest text-foreground/40">Storage</span>
+              <span
+                className="text-[8px] font-mono uppercase tracking-widest font-bold"
+                style={{
+                  color: storageInfo.isAtLimit ? '#ff2d2d' : storageInfo.isNearLimit ? '#ffbb00' : '#22c55e',
+                }}
+              >
+                {storageInfo.usedMB}/{storageInfo.limitMB} MB
+              </span>
+            </div>
+            <div className="w-full h-1 bg-border/20 rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${Math.min(storageInfo.usagePercent, 100)}%`,
+                  backgroundColor: storageInfo.isAtLimit ? '#ff2d2d' : storageInfo.isNearLimit ? '#ffbb00' : '#22c55e',
+                }}
+              />
+            </div>
+            {storageInfo.isAtLimit && (
+              <p className="text-[7.5px] font-mono uppercase tracking-widest text-[#ff2d2d] mt-1.5 leading-relaxed">
+                Storage penuh — hapus gambar sebelum upload baru.
+              </p>
+            )}
+            {storageInfo.isNearLimit && !storageInfo.isAtLimit && (
+              <p className="text-[7.5px] font-mono uppercase tracking-widest text-[#ffbb00] mt-1.5 leading-relaxed">
+                Storage hampir penuh — segera hapus gambar yang tidak terpakai.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* ── SIDEBAR BOTTOM NAV: switch between Projects / Categories ── */}
         <div className="border-t border-border/10 flex shrink-0">
@@ -897,7 +985,14 @@ export default function AdminDashboard({ initialProjects }: { initialProjects: P
                           required
                           type="text"
                           value={formData.slug}
-                          onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                          onChange={(e) => {
+                            const sanitized = e.target.value
+                              .toLowerCase()
+                              .replace(/\s+/g, '-')
+                              .replace(/[^a-z0-9-]/g, '')
+                              .replace(/-+/g, '-');
+                            setFormData({ ...formData, slug: sanitized });
+                          }}
                           className="px-3 py-2.5 bg-black/20 border border-border/15 font-mono text-xs focus:outline-none focus:border-accent text-foreground transition-colors"
                           placeholder="e.g. obsidian-architecture"
                         />
@@ -983,8 +1078,9 @@ export default function AdminDashboard({ initialProjects }: { initialProjects: P
                           <input
                             type="file"
                             accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+                            disabled={storageInfo?.isAtLimit === true}
                             onChange={handleThumbnailChange}
-                            className="text-[10px] text-foreground/60 file:bg-border/20 file:border-none file:text-[9px] file:uppercase file:font-mono file:text-foreground file:px-3 file:py-1 file:cursor-pointer hover:file:bg-accent hover:file:text-black transition-colors"
+                            className="text-[10px] text-foreground/60 file:bg-border/20 file:border-none file:text-[9px] file:uppercase file:font-mono file:text-foreground file:px-3 file:py-1 file:cursor-pointer hover:file:bg-accent hover:file:text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                           />
                         </div>
                       </div>
@@ -1034,8 +1130,9 @@ export default function AdminDashboard({ initialProjects }: { initialProjects: P
                             type="file"
                             accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
                             multiple
+                            disabled={storageInfo?.isAtLimit === true}
                             onChange={handleMockupsChange}
-                            className="text-[10px] text-foreground/60 file:bg-border/20 file:border-none file:text-[9px] file:uppercase file:font-mono file:text-foreground file:px-3 file:py-1 file:cursor-pointer hover:file:bg-accent hover:file:text-black transition-colors"
+                            className="text-[10px] text-foreground/60 file:bg-border/20 file:border-none file:text-[9px] file:uppercase file:font-mono file:text-foreground file:px-3 file:py-1 file:cursor-pointer hover:file:bg-accent hover:file:text-black transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                           />
                         </div>
                       </div>
@@ -1083,115 +1180,84 @@ export default function AdminDashboard({ initialProjects }: { initialProjects: P
             </div>
           </div>
         ) : (
-          <>
-            {/* Mobile: inline project catalog */}
-            <div className="lg:hidden flex flex-col h-full min-h-0">
-              <div className="p-4 border-b border-border/10 flex flex-col gap-3 shrink-0">
-                <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-foreground/30" />
-                  <input
-                    type="text"
-                    placeholder="SEARCH PORTFOLIO..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-black/40 border border-border/15 py-2 pl-9 pr-3 text-[10px] uppercase tracking-widest font-mono text-foreground placeholder:text-foreground/20 focus:outline-none focus:border-accent transition-colors"
-                  />
-                </div>
-                <div className="flex gap-1 overflow-x-auto no-scrollbar pb-1 text-[8px] tracking-wider uppercase font-semibold">
-                  {['ALL', ...categories.map((c) => c.name)].map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`px-2 py-1 shrink-0 border transition-all cursor-pointer ${
-                        selectedCategory === cat
-                          ? 'border-accent text-accent bg-accent/5 font-extrabold'
-                          : 'border-border/10 text-foreground/40 hover:text-foreground hover:border-border/20'
-                      }`}
-                    >
-                      {cat.split(' ')[0]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2 no-scrollbar">
-                {filteredProjects.map((p) => {
-                  const isCurrent = formData.id === p.id;
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => handleEdit(p)}
-                      className={`flex items-center gap-3 p-3 border transition-all duration-200 cursor-pointer ${
-                        isCurrent
-                          ? 'border-accent/40 bg-accent/[0.03]'
-                          : 'border-border/10 hover:border-border/20 hover:bg-black/10'
-                      }`}
-                    >
-                      <div className="relative w-12 h-12 border border-border/10 bg-border/5 shrink-0 overflow-hidden">
-                        {p.thumbnail ? (
-                          <Image src={p.thumbnail} alt={p.title} fill className="object-cover" sizes="48px" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-[7px] text-foreground/30 font-mono">NULL</div>
-                        )}
-                      </div>
-                      <div className="flex-grow min-w-0 flex flex-col">
-                        <span className="truncate text-[10px] font-bold uppercase tracking-wider text-foreground/90">{p.title}</span>
-                        <span className="text-[7.5px] font-mono uppercase tracking-widest text-foreground/40 mt-1">
-                          {p.category} {'//'} {p.year || '2026'}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
-                        className="p-2 text-red-500 hover:text-red-400 cursor-pointer shrink-0"
-                        title="Delete Project"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  );
-                })}
-                {filteredProjects.length === 0 && (
-                  <div className="text-center py-16 text-[9px] uppercase tracking-widest font-mono text-foreground/20">
-                    No matching projects
-                  </div>
-                )}
-              </div>
-              <div className="border-t border-border/10 p-4 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleCreate}
-                  className="w-full bg-foreground text-background font-black py-2.5 px-6 text-[9px] uppercase tracking-[0.2em] hover:bg-accent hover:text-black transition-all duration-300 rounded-sm cursor-pointer"
-                >
-                  + New Project
-                </button>
-              </div>
+          /* Idle workspace — desktop only; mobile uses the sidebar drawer */
+          <div className="flex flex-col h-full items-center justify-center text-center gap-5 p-12">
+            <div className="p-6 border border-border/10 bg-black/10 flex items-center justify-center">
+              <ImageIcon size={48} className="opacity-15 text-foreground" />
             </div>
-
-            {/* Desktop: idle workspace */}
-            <div className="hidden lg:flex flex-col h-full items-center justify-center text-center gap-5 p-12">
-              <div className="p-6 border border-border/10 bg-black/10 flex items-center justify-center">
-                <ImageIcon size={48} className="opacity-15 text-foreground" />
-              </div>
-              <div>
-                <h3 className="text-xs uppercase tracking-[0.25em] font-extrabold text-foreground/70 mb-1">
-                  Workspace Idle
-                </h3>
-                <p className="text-[10px] text-foreground/30 uppercase tracking-widest max-w-xs leading-relaxed font-mono">
-                  Select an existing project from the catalog sidebar or launch a new design workspace setup.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleCreate}
-                className="mt-2 bg-foreground text-background font-black py-2.5 px-6 text-[9px] uppercase tracking-[0.2em] hover:bg-accent hover:text-black transition-all duration-300 rounded-sm cursor-pointer"
-              >
-                Initialize Project Workspace
-              </button>
+            <div>
+              <h3 className="text-xs uppercase tracking-[0.25em] font-extrabold text-foreground/70 mb-1">
+                Workspace Idle
+              </h3>
+              <p className="text-[10px] text-foreground/30 uppercase tracking-widest max-w-xs leading-relaxed font-mono">
+                Select an existing project from the catalog sidebar or launch a new design workspace setup.
+              </p>
             </div>
-          </>
+            <button
+              type="button"
+              onClick={handleCreate}
+              className="mt-2 bg-foreground text-background font-black py-2.5 px-6 text-[9px] uppercase tracking-[0.2em] hover:bg-accent hover:text-black transition-all duration-300 rounded-sm cursor-pointer"
+            >
+              Initialize Project Workspace
+            </button>
+          </div>
         )}
       </main>
+      )}
+
+      {/* ── CONFIRM DELETE MODAL ── */}
+      {confirmModal.open && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <button
+            type="button"
+            aria-label="Cancel"
+            onClick={closeConfirm}
+            className="absolute inset-0 bg-black/80 backdrop-blur-[2px] cursor-pointer"
+          />
+          {/* Modal */}
+          <div className="relative z-10 w-full max-w-sm border border-border/30 bg-background p-6 flex flex-col gap-5">
+            {/* Tech corners */}
+            <div className="absolute -top-px -left-px w-2 h-2 border-t-2 border-l-2 border-accent/60" />
+            <div className="absolute -top-px -right-px w-2 h-2 border-t-2 border-r-2 border-accent/60" />
+            <div className="absolute -bottom-px -left-px w-2 h-2 border-b-2 border-l-2 border-accent/60" />
+            <div className="absolute -bottom-px -right-px w-2 h-2 border-b-2 border-r-2 border-accent/60" />
+
+            {/* Header */}
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 bg-accent animate-pulse shrink-0" />
+              <span className="text-[9px] font-mono tracking-[0.3em] text-accent uppercase font-bold">
+                {confirmModal.title}
+              </span>
+            </div>
+
+            {/* Message */}
+            <p className="text-[11px] font-mono text-foreground/70 uppercase tracking-wider leading-relaxed">
+              {confirmModal.message}
+            </p>
+
+            {/* Actions */}
+            <div className="flex gap-2 justify-end pt-1">
+              <button
+                type="button"
+                onClick={closeConfirm}
+                className="px-4 py-2 text-[9px] font-mono uppercase tracking-widest font-bold border border-border/20 text-foreground/50 hover:text-foreground hover:border-border/40 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  closeConfirm();
+                  confirmModal.onConfirm();
+                }}
+                className="px-4 py-2 text-[9px] font-mono uppercase tracking-widest font-bold bg-accent/10 border border-accent/40 text-accent hover:bg-accent hover:text-black transition-all cursor-pointer"
+              >
+                Delete //
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── SNACKBAR TOAST OVERLAY ── */}
@@ -1202,17 +1268,17 @@ export default function AdminDashboard({ initialProjects }: { initialProjects: P
             className="pointer-events-auto px-4 py-3 rounded-sm flex items-start gap-2.5 font-mono text-[9px] sm:text-[10px] tracking-widest uppercase font-bold border animate-[snackSlideIn_0.25s_ease]"
             style={{
               backgroundColor:
-                n.type === 'success' ? '#0d1a00' :
+                n.type === 'success' ? '#001a00' :
                 n.type === 'error'   ? '#1a0000' :
-                n.type === 'warning' ? '#1a1100' : '#0a0a0a',
+                n.type === 'warning' ? '#1a1100' : '#0d0d1a',
               borderColor:
-                n.type === 'success' ? '#CCFF00' :
-                n.type === 'error'   ? '#ff4444' :
-                n.type === 'warning' ? '#ffbb00' : '#444',
+                n.type === 'success' ? '#22c55e' :
+                n.type === 'error'   ? '#ff2d2d' :
+                n.type === 'warning' ? '#ffbb00' : '#facc15',
               color:
-                n.type === 'success' ? '#CCFF00' :
-                n.type === 'error'   ? '#ff4444' :
-                n.type === 'warning' ? '#ffbb00' : '#ffffff',
+                n.type === 'success' ? '#22c55e' :
+                n.type === 'error'   ? '#ff2d2d' :
+                n.type === 'warning' ? '#ffbb00' : '#facc15',
             }}
           >
             <span className="text-sm leading-none shrink-0">

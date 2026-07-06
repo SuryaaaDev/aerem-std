@@ -3,7 +3,7 @@
 :root {
   --background: #0d0d0d;
   --foreground: #ffffff;
-  --accent: #ccff00;
+  --accent: #ff2d2d;
   --border: #2a2a2a;
 }
 
@@ -14,6 +14,10 @@
   --color-border: var(--border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
